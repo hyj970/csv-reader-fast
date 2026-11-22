@@ -1,0 +1,30 @@
+// csv-reader-fast entry driver: reads every case from /input/cases.json,
+// answers each one alone with run() from solve.js, and writes
+// /output/answers.json. Outside a container MAKEFUN_INPUT_DIR and
+// MAKEFUN_OUTPUT_DIR stand in for /input and /output.
+
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { setFlagsFromString } from 'node:v8';
+
+// V8's incremental marking off, set before solve.js is imported so all of its
+// work runs under it (the rules: the house baseline runs with
+// --no-incremental-marking, and an entry may tune V8's flags too).
+setFlagsFromString('--no-incremental-marking');
+
+/** solve.js, imported by its URL (a .js module carries no types) and typed by its contract. */
+const { run } = (await import(new URL('./solve.js', import.meta.url).href)) as { run: (input: unknown) => unknown };
+
+const INPUT_DIR = process.env.MAKEFUN_INPUT_DIR ?? '/input';
+const OUTPUT_DIR = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+
+const cases = JSON.parse(readFileSync(join(INPUT_DIR, 'cases.json'), 'utf8')) as { id: string; input: unknown }[];
+// Serialise each answer as it is produced and join the pieces, instead of
+// holding the whole answers array and stringifying it at once: the per-case
+// answer objects become garbage as soon as they are written, so peak memory
+// stays near one case instead of the whole set. The bytes are identical to
+// JSON.stringify of the answers array (an array stringifies as its elements
+// joined by commas inside brackets).
+const parts = new Array<string>(cases.length);
+for (let i = 0; i < cases.length; i++) parts[i] = JSON.stringify(run(cases[i]!.input));
+writeFileSync(join(OUTPUT_DIR, 'answers.json'), `[${parts.join(',')}]`);
